@@ -1,0 +1,15 @@
+{
+  "name": "imperium-analytics-admin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Imperium Analytics Admin — panel cross-vertical Nomad Knight",
+  "workspaces": ["server", "client"],
+  "scripts": {
+    "dev": "concurrently -n SERVER,CLIENT -c magenta,cyan \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "build": "npm --prefix client run build",
+    "seed": "npm --prefix server run db:seed"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

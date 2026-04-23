@@ -1,0 +1,251 @@
+// Imperium Analytics Admin · schema
+// Postgres desde día 1 · aislamiento per-vertical via DB dedicada
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ AUTH ============
+
+model User {
+  id                   String   @id @default(uuid())
+  email                String   @unique
+  name                 String
+  passwordHash         String
+  role                 String   @default("superadmin") // superadmin | operator
+  isActive             Boolean  @default(true)
+
+  // MFA (TOTP)
+  mfaEnabled           Boolean  @default(false)
+  mfaSecretCipher      String?  // AES-256-GCM · nunca plaintext
+  recoveryCodesHashed  String[] // 8 códigos hasheados · se descartan al usarse
+  forcePasswordChange  Boolean  @default(false)
+
+  lastLoginAt          DateTime?
+  lastLoginIP          String?
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  refreshTokens        RefreshToken[]
+  mfaAttempts          MfaAttempt[]
+  auditLogs            AuditLog[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model MfaAttempt {
+  id         String   @id @default(uuid())
+  userId     String
+  ip         String?
+  code       String   // solo primeros 2 + últimos 2 chars · hash del resto
+  valid      Boolean
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// ============ CUSTOMERS ============
+
+model Customer {
+  id            String   @id @default(uuid())
+  legalName     String   // razón social
+  rfc           String?  @unique
+  contactName   String?
+  contactEmail  String?
+  contactPhone  String?
+  address       String?
+  notes         String?
+  isTaxExempt   Boolean  @default(false) // para IVA
+  status        String   @default("active") // active | paused | cancelled
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  modules       CustomerModule[]
+  invoices      Invoice[]
+}
+
+// ============ MODULES (verticales registrados) ============
+
+model Module {
+  code              String   @id // 'rt', 'nk', 'kp', ...
+  name              String   // "RoundTable", "NetKnight", ...
+  description       String?
+
+  apiEndpoint       String   // http://localhost:3003
+  sharedSecretCipher String  // HMAC shared secret (AES-256-GCM cifrado)
+  apiTokenCipher    String?  // JWT super-admin del vertical para pulls (cifrado)
+
+  status            String   @default("active") // active | paused | deprecated
+  version           String?  // última versión conocida (desde /health)
+
+  lastSyncAt        DateTime?
+  lastHealthCheck   DateTime?
+  lastHealthStatus  String?  // ok | degraded | down
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customerModules   CustomerModule[]
+  webhookEvents     WebhookEvent[]
+}
+
+// ============ CUSTOMER ↔ MODULE (M:N) ============
+
+model CustomerModule {
+  id                String   @id @default(uuid())
+  customerId        String
+  moduleCode        String
+  tenantIdInModule  String?  // UUID del Tenant creado en el vertical
+  tenantSlug        String?  // cache del slug
+  status            String   @default("trial") // trial | active | suspended | cancelled
+  activatedAt       DateTime @default(now())
+  deactivatedAt     DateTime?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  customer          Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  module            Module   @relation(fields: [moduleCode], references: [code], onDelete: Cascade)
+  licenses          License[]
+
+  @@unique([customerId, moduleCode])
+  @@index([moduleCode])
+  @@index([status])
+}
+
+// ============ LICENCIAS ============
+
+model License {
+  id                 String   @id @default(uuid())
+  customerModuleId   String
+  tier               String   // scribe, herald, steward, regent (RT) · starter, pro, business, enterprise (NK)
+  key                String   @unique
+  priceMXN           Int
+  activatedAt        DateTime @default(now())
+  expiresAt          DateTime
+  status             String   @default("active") // active | expired | cancelled
+  autoRenew          Boolean  @default(false)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  customerModule     CustomerModule @relation(fields: [customerModuleId], references: [id], onDelete: Cascade)
+
+  @@index([customerModuleId])
+  @@index([expiresAt])
+  @@index([status])
+}
+
+// ============ FACTURACIÓN ============
+
+model Invoice {
+  id              String   @id @default(uuid())
+  customerId      String
+  numero          String   @unique // "IA-2026-04-0001"
+  periodStart     DateTime
+  periodEnd       DateTime
+  subtotalMXN     Int
+  ivaMXN          Int      @default(0)
+  totalMXN        Int
+  status          String   @default("draft") // draft | sent | paid | overdue | cancelled
+  items           Json     // snapshot de CustomerModules activos + licenses
+  notes           String?
+  issuedAt        DateTime?
+  dueAt           DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  payments        Payment[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([periodStart])
+}
+
+model Payment {
+  id           String   @id @default(uuid())
+  invoiceId    String
+  amountMXN    Int
+  method       String   // transferencia | tarjeta | efectivo | stripe
+  reference    String?  // folio/referencia externa
+  paidAt       DateTime @default(now())
+  notes        String?
+
+  createdAt    DateTime @default(now())
+
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([paidAt])
+}
+
+// ============ WEBHOOKS INBOUND ============
+
+model WebhookEvent {
+  id            String   @id @default(uuid())
+  moduleCode    String
+  event         String   // tenant.created, payment.received, ...
+  payload       Json
+  signature     String
+  headers       Json?
+  verified      Boolean
+  processedAt   DateTime?
+  error         String?
+  ip            String?
+
+  createdAt     DateTime @default(now())
+
+  module        Module   @relation(fields: [moduleCode], references: [code], onDelete: Cascade)
+
+  @@index([moduleCode])
+  @@index([event])
+  @@index([processedAt])
+  @@index([createdAt])
+}
+
+// ============ AUDIT LOG ============
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?  // null si es sistema
+  action      String   // "customer.create", "license.extend", "mfa.setup", ...
+  moduleCode  String?  // cual vertical afectado (null si solo Admin)
+  customerId  String?
+  entity      String?  // Customer, License, Invoice, ...
+  entityId    String?
+  metadata    Json?
+  ipAddress   String?
+  userAgent   String?
+
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([moduleCode])
+  @@index([customerId])
+  @@index([action])
+  @@index([createdAt])
+}

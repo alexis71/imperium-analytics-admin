@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ia-bg: #0b0a14;
+  --ia-surface: #15132a;
+  --ia-accent: #7c3aed;
+  --ia-accent-soft: rgba(124,58,237,0.15);
+  --ia-fg: #e2e8f0;
+  --ia-muted: #94a3b8;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--ia-bg);
+  color: var(--ia-fg);
+}
+
+.sc {
+  background: var(--ia-surface);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+}
+
+/* Modal panel · alias consistente cross-vertical */
+.sc.modal-panel, .modal-panel {
+  background: var(--ia-surface);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.lbl {
+  display: block;
+  font-size: 11px;
+  color: var(--ia-muted);
+  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inp {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: var(--ia-fg);
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.inp:focus {
+  outline: none;
+  border-color: var(--ia-accent);
+  background: rgba(124,58,237,0.05);
+}
+
+.bp {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--ia-accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.bp:hover { background: #8b46f4; }
+.bp:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ia-seal {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ia-accent) 0%, #4c1d95 100%);
+  position: relative;
+}
+.ia-seal::before {
+  content: 'IA';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
