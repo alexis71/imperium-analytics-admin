@@ -62,6 +62,17 @@ const api = {
   dashboard: {
     stats: () => request('/dashboard/stats'),
   },
+
+  webhooks: {
+    events: (filters = {}) => {
+      const q = Object.entries(filters)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+        .join('&');
+      return request(`/webhooks-inbox/events${q ? '?' + q : ''}`);
+    },
+    detail: (id) => request(`/webhooks-inbox/events/${id}`),
+  },
 };
 
 export default api;
