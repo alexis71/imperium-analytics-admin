@@ -11,7 +11,7 @@ const NAV = [
   { to: '/webhooks',     icon: Webhook,         label: 'Webhooks' },
   { to: '/settings',     icon: Settings,        label: 'Settings' },
   { to: '/core-modules', icon: Boxes,           label: 'Módulos core', disabled: true, phase: 'Fase G' },
-  { to: '/audit',        icon: History,         label: 'Audit',        disabled: true, phase: 'Fase D' },
+  { to: '/audit',        icon: History,         label: 'Audit' },
 ];
 
 export default function Layout() {

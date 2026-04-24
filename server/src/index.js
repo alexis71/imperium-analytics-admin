@@ -78,6 +78,7 @@ app.use('/api/v1/modules', require('./routes/modules'));
 app.use('/api/v1/customers', require('./routes/customers'));
 app.use('/api/v1/licenses', require('./routes/licenses'));
 app.use('/api/v1/webhooks-inbox', require('./routes/webhooks-inbox'));
+app.use('/api/v1/audit-log', require('./routes/audit'));
 app.use('/api/v1/invoices', require('./routes/invoices'));
 app.use('/api/v1/settings', require('./routes/settings'));
 

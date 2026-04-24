@@ -73,6 +73,17 @@ const api = {
     },
     detail: (id) => request(`/webhooks-inbox/events/${id}`),
   },
+
+  audit: {
+    list: (filters = {}) => {
+      const q = Object.entries(filters)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+        .join('&');
+      return request(`/audit-log${q ? '?' + q : ''}`);
+    },
+    detail: (id) => request(`/audit-log/${id}`),
+  },
 };
 
 export default api;

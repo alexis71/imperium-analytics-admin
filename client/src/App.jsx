@@ -9,6 +9,7 @@ import Modules from './pages/Modules';
 import Customers from './pages/Customers';
 import Licenses from './pages/Licenses';
 import Webhooks from './pages/Webhooks';
+import AuditLog from './pages/AuditLog';
 import Invoices from './pages/Invoices';
 import InvoiceDetail from './pages/InvoiceDetail';
 import Settings from './pages/Settings';
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="modules" element={<Navigate to="/verticales" replace />} />
         <Route path="licenses" element={<Licenses />} />
         <Route path="webhooks" element={<Webhooks />} />
+        <Route path="audit" element={<AuditLog />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/:id" element={<InvoiceDetail />} />
         <Route path="settings" element={<Settings />} />
