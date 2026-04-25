@@ -69,3 +69,24 @@ npm run dev
 - Webhooks inbound requieren HMAC verificado · sin verificar → guardados con `verified=false` para debugging pero NO se procesan
 - Audit log inmutable · no hay endpoint de delete
 - Rate limit de MFA: 5 intentos/15min por usuario (ventana rolling)
+
+## Security rules baseline
+
+Reglas OWASP 2025 + JavaScript + Express + React aplicadas via `.claude/security-rules/`:
+
+- `owasp-2025.md` · A01-A10 (strict + warning + advisory)
+- `javascript.md` · code execution, DOM, crypto, HTTP security
+- `express.md` · middleware, validation, sessions, DB, uploads [solo `/server/`]
+- `react.md` · XSS, state, API, CSRF, forms [solo `/client/`]
+- `OVERRIDES.md` · excepciones documentadas (currentPassword visibility scoped super-admin, localStorage JWT)
+
+**Fuente**: TikiTribe/claude-secure-coding-rules v1.0.0 (MIT). Source canónico en `Desktop/_security-rules-source/`. Re-sync: `bash Desktop/sync-security-rules.sh`.
+
+**Precedencia**:
+1. `.claude/security-rules/*.md` · más específico (seguridad)
+2. Este `CLAUDE.md` · workflow + arquitectura + dominio
+3. Memorias globales `feedback_*` · cross-app conventions
+
+**Nota Admin**: Admin es el único vertical con MFA TOTP implementado (speakeasy + qrcode) · modelo de referencia para replicar en KP/RT/NK/Hub (ver Opción 2.a del security hardening roadmap).
+
+**Principio**: security + workflow rules son complementarias. Choques doctrinales se declaran en `OVERRIDES.md`.
