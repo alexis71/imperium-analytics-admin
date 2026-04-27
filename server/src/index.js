@@ -81,6 +81,7 @@ app.use('/api/v1/webhooks-inbox', require('./routes/webhooks-inbox'));
 app.use('/api/v1/audit-log', require('./routes/audit'));
 app.use('/api/v1/invoices', require('./routes/invoices'));
 app.use('/api/v1/settings', require('./routes/settings'));
+app.use('/api/v1/admin-override', require('./routes/admin-override'));
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Ruta no encontrada', path: req.path }));

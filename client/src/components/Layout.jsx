@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Boxes, Key, FileText, Webhook, History, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Boxes, Key, FileText, Webhook, History, Settings, LogOut, ShieldOff } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 const NAV = [
@@ -9,6 +9,7 @@ const NAV = [
   { to: '/licenses',     icon: Key,             label: 'Licenses' },
   { to: '/invoices',     icon: FileText,        label: 'Invoices' },
   { to: '/webhooks',     icon: Webhook,         label: 'Webhooks' },
+  { to: '/admin-override', icon: ShieldOff,     label: 'Soporte cliente' },
   { to: '/settings',     icon: Settings,        label: 'Settings' },
   { to: '/core-modules', icon: Boxes,           label: 'Módulos core', disabled: true, phase: 'Fase G' },
   { to: '/audit',        icon: History,         label: 'Audit' },

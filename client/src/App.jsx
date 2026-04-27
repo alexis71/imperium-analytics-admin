@@ -13,6 +13,7 @@ import AuditLog from './pages/AuditLog';
 import Invoices from './pages/Invoices';
 import InvoiceDetail from './pages/InvoiceDetail';
 import Settings from './pages/Settings';
+import AdminOverride from './pages/AdminOverride';
 import Layout from './components/Layout';
 
 function Protected({ children }) {
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/:id" element={<InvoiceDetail />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="admin-override" element={<AdminOverride />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
