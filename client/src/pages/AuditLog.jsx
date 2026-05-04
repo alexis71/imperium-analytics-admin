@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { History, Eye, RefreshCw, Filter, User as UserIcon, Server } from 'lucide-react';
+import { History, Eye, RefreshCw, Filter, User as UserIcon, Server, Download } from 'lucide-react';
 import api from '../services/api';
 
 const MODULES = [
@@ -44,6 +44,22 @@ export default function AuditLog() {
   const setFilter = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
   const clearFilters = () => setFilters({ action: '', entity: '', moduleCode: '', limit: 100 });
 
+  const exportCsv = async () => {
+    // Fetch con auth y descarga vía Blob (no se puede `<a download>` porque endpoint requiere Bearer)
+    const params = new URLSearchParams(
+      Object.entries(filters).filter(([k, v]) => v && k !== 'limit')
+    ).toString();
+    const r = await api.request(`/audit-log/export.csv${params ? '?' + params : ''}`, { rawBlob: true });
+    const url = URL.createObjectURL(r);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-${new Date().toISOString().substring(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   if (!rows) return <div style={{ padding: 40 }}>Cargando...</div>;
 
   return (
@@ -65,6 +81,15 @@ export default function AuditLog() {
           </label>
           <button className="bg" onClick={load} disabled={loading} style={{ fontSize: 12 }}>
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="bg"
+            style={{ fontSize: 12 }}
+            title="Exportar audit log filtrado a CSV (compliance LFPDPPP)"
+          >
+            <Download size={13} /> CSV
           </button>
         </div>
       </header>

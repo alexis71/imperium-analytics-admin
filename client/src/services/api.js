@@ -8,6 +8,17 @@ async function request(path, opts = {}) {
   if (token && !opts.skipAuth) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(BASE + path, { ...opts, headers });
+
+  // rawBlob: para downloads autenticados (CSV export, PDF, etc.)
+  if (opts.rawBlob) {
+    if (!res.ok) {
+      const err = new Error(`HTTP ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    return await res.blob();
+  }
+
   const contentType = res.headers.get('Content-Type') || '';
   const data = contentType.includes('json') ? await res.json().catch(() => ({})) : await res.text();
 

@@ -201,6 +201,28 @@ function ResetPasswordModal({ user, moduleCode, tenantId, onClose, onSuccess }) 
   return (
     <ModalShell title={`Reset password · ${user.email}`} onClose={onClose}>
       <form onSubmit={submit}>
+        {/* Warning preview · qué exactamente vas a ejecutar */}
+        <div style={{
+          background: 'rgba(245,158,11,0.08)',
+          border: '1px solid rgba(245,158,11,0.3)',
+          borderRadius: 8,
+          padding: '10px 12px',
+          marginBottom: 14,
+          fontSize: 12,
+          color: '#fbbf24',
+          lineHeight: 1.5,
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 6, color: '#fcd34d' }}>
+            ⚠ Acción auditada · revisa antes de confirmar
+          </div>
+          <div style={{ color: 'var(--ia-muted)' }}>
+            Vertical: <code style={{ color: '#fbbf24' }}>{moduleCode}</code>{tenantId && <> · tenant <code style={{ color: '#fbbf24' }}>{tenantId.substring(0, 8)}…</code></>}<br/>
+            Usuario: <code style={{ color: '#fbbf24' }}>{user.email}</code><br/>
+            Acción: reset password{alsoResetMfa ? ' + reset MFA' : ''}{newPassword.trim() ? ' (password manual)' : ' (random generado)'}<br/>
+            Esta operación queda en audit log inmutable de Admin · no puede deshacerse.
+          </div>
+        </div>
+
         <label className="lbl">Nueva password (opcional · vacío = random)</label>
         <input type="text" className="inp" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
           placeholder="(generar random)" minLength={8} maxLength={128} style={{ marginBottom: 12, fontFamily: 'monospace' }} />

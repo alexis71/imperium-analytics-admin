@@ -124,15 +124,102 @@ async function handleEvent(moduleCode, event, payload) {
     }
 
     case 'tenant.tier.changed': {
-      // El tier vive dentro de License (no en CustomerModule); se reconcilia en C.3
-      // cuando exista sync de licenses. Por ahora solo registra.
+      // El tier vive en License. Si el payload trae licenseKey + nuevo tier, actualizamos.
+      // Si solo trae tenantId, log y dejamos para reconcile manual (script reconcile-empresa.js).
+      const key = payload.licenseKey || payload.key || null;
+      const newTier = payload.tier || payload.newTier || null;
+      if (!key || !newTier) {
+        logger.info('webhook.tenant.tier.changed.skipped', { moduleCode, reason: 'sin licenseKey o tier en payload' });
+        return;
+      }
+      const lic = await prisma.license.findUnique({ where: { key } });
+      if (!lic) {
+        logger.warn('webhook.tenant.tier.changed.no_license', { moduleCode, key });
+        return;
+      }
+      await prisma.license.update({ where: { id: lic.id }, data: { tier: newTier } });
+      logger.info('webhook.tenant.tier.changed.applied', { moduleCode, key, tier: newTier });
       return;
     }
 
-    case 'license.activated':
-    case 'license.extended':
+    case 'license.activated': {
+      // Vertical reportó que una License existente fue activada/reactivada.
+      // No crea License automáticamente: License nace en Admin UI (Customer → Issue License)
+      // y la key viaja al vertical después.
+      const key = payload.licenseKey || payload.key;
+      if (!key) {
+        logger.warn('webhook.license.activated.no_key', { moduleCode, payload });
+        return;
+      }
+      const lic = await prisma.license.findUnique({ where: { key } });
+      if (!lic) {
+        logger.warn('webhook.license.activated.no_license', { moduleCode, key });
+        return;
+      }
+      await prisma.license.update({
+        where: { id: lic.id },
+        data: {
+          status: 'active',
+          activatedAt: payload.activatedAt ? new Date(payload.activatedAt) : new Date(),
+        },
+      });
+      logger.info('webhook.license.activated.applied', { moduleCode, key });
+      return;
+    }
+
+    case 'license.extended': {
+      // Vertical extendió fecha de expiración. Update expiresAt + status=active.
+      const key = payload.licenseKey || payload.key;
+      const newExpiresAt = payload.expiresAt || payload.newExpiresAt;
+      if (!key || !newExpiresAt) {
+        logger.warn('webhook.license.extended.invalid_payload', { moduleCode, hasKey: !!key, hasExpiry: !!newExpiresAt });
+        return;
+      }
+      const lic = await prisma.license.findUnique({ where: { key } });
+      if (!lic) {
+        logger.warn('webhook.license.extended.no_license', { moduleCode, key });
+        return;
+      }
+      await prisma.license.update({
+        where: { id: lic.id },
+        data: { expiresAt: new Date(newExpiresAt), status: 'active' },
+      });
+      logger.info('webhook.license.extended.applied', { moduleCode, key, until: newExpiresAt });
+      return;
+    }
+
     case 'license.expired': {
-      // TODO C.3 · tracking de licenses individuales
+      // Vertical detectó expiración local. Marcamos status=expired en Admin.
+      const key = payload.licenseKey || payload.key;
+      if (!key) {
+        logger.warn('webhook.license.expired.no_key', { moduleCode, payload });
+        return;
+      }
+      const lic = await prisma.license.findUnique({ where: { key } });
+      if (!lic) {
+        logger.warn('webhook.license.expired.no_license', { moduleCode, key });
+        return;
+      }
+      await prisma.license.update({ where: { id: lic.id }, data: { status: 'expired' } });
+      logger.info('webhook.license.expired.applied', { moduleCode, key });
+      return;
+    }
+
+    case 'license.cancelled':
+    case 'license.suspended': {
+      // Vertical reportó cancelación/suspensión.
+      const key = payload.licenseKey || payload.key;
+      if (!key) {
+        logger.warn('webhook.license.cancelled.no_key', { moduleCode, payload });
+        return;
+      }
+      const lic = await prisma.license.findUnique({ where: { key } });
+      if (!lic) {
+        logger.warn('webhook.license.cancelled.no_license', { moduleCode, key });
+        return;
+      }
+      await prisma.license.update({ where: { id: lic.id }, data: { status: 'cancelled' } });
+      logger.info('webhook.license.cancelled.applied', { moduleCode, key });
       return;
     }
 
