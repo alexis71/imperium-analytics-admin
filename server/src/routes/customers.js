@@ -158,12 +158,14 @@ router.patch('/:id/modules/:moduleCode/unsuspend', async (req, res) => {
   }
 });
 
-// POST /customers/:id/modules · vincular tenant existente a customer + crear License
+// POST /customers/:id/modules · vincular tenant a customer + crear License
+// Soporta core modules (Finance/HR/etc.) per-vertical via parentVerticalCode.
+// Ej: { moduleCode: 'fin', parentVerticalCode: 'kp' } = Finance × Kompaws.
 router.post('/:id/modules', async (req, res) => {
   const { id } = req.params;
   const {
-    moduleCode, tenantIdInModule, tenantSlug,
-    // License opcional (si no viene, se crea una "courtesy" trial sin precio)
+    moduleCode, parentVerticalCode = null,
+    tenantIdInModule, tenantSlug,
     tier, priceMXN, licenseDays,
   } = req.body;
 
@@ -178,17 +180,20 @@ router.post('/:id/modules', async (req, res) => {
     const module = await prisma.module.findUnique({ where: { code: moduleCode } });
     if (!module) return res.status(404).json({ error: 'Module no registrado' });
 
+    // Unique compuesto · permite Finance×KP y Finance×RT como rows separadas
     const existing = await prisma.customerModule.findFirst({
-      where: { customerId: id, moduleCode },
+      where: { customerId: id, moduleCode, parentVerticalCode },
     });
     if (existing) {
-      return res.status(409).json({ error: 'Este customer ya tiene ese módulo vinculado', existingId: existing.id });
+      const label = parentVerticalCode ? `${moduleCode} × ${parentVerticalCode}` : moduleCode;
+      return res.status(409).json({ error: `Customer ya tiene ${label} vinculado`, existingId: existing.id });
     }
 
     const cm = await prisma.customerModule.create({
       data: {
         customerId: id,
         moduleCode,
+        parentVerticalCode,
         tenantIdInModule,
         tenantSlug: tenantSlug || null,
         status: 'active',
@@ -262,18 +267,23 @@ router.get('/available-tenants/:moduleCode', async (req, res) => {
 });
 
 // DELETE /customers/:id/modules/:moduleCode · desvincular (no borra el tenant en el vertical)
+// DELETE /customers/:id/modules/:moduleCode[?parentVerticalCode=kp]
+// Para core modules pasa ?parentVerticalCode=<vertical> · para verticales puros omitir
 router.delete('/:id/modules/:moduleCode', async (req, res) => {
   const { id, moduleCode } = req.params;
+  const parentVerticalCode = req.query.parentVerticalCode || null;
   try {
-    const cm = await prisma.customerModule.findFirst({ where: { customerId: id, moduleCode } });
+    const cm = await prisma.customerModule.findFirst({
+      where: { customerId: id, moduleCode, parentVerticalCode },
+    });
     if (!cm) return res.status(404).json({ error: 'No vinculado' });
 
     await prisma.customerModule.delete({ where: { id: cm.id } });
     await audit(req, 'customer.module.detach', 'CustomerModule', cm.id,
-      { moduleCode, tenantIdInModule: cm.tenantIdInModule },
+      { moduleCode, parentVerticalCode, tenantIdInModule: cm.tenantIdInModule },
       { customerId: id, moduleCode });
 
-    res.json({ data: { ok: true, detachedTenantId: cm.tenantIdInModule } });
+    res.json({ data: { ok: true, detachedTenantId: cm.tenantIdInModule, parentVerticalCode } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

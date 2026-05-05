@@ -115,7 +115,11 @@ model CustomerModule {
   id               String    @id @default(uuid())
   customerId       String
   moduleCode       String
-  tenantIdInModule String? // UUID del Tenant creado en el vertical
+  // parentVerticalCode: si es módulo CORE (fin/hr/sales/inv/crm), apunta al vertical
+  // sobre el cual está activo (kp/rt/nk/al). Si es vertical (kp/rt/nk/al), null.
+  // Ej: Finance × Kompaws → moduleCode='fin', parentVerticalCode='kp'.
+  parentVerticalCode String?
+  tenantIdInModule String? // UUID del Tenant creado en el vertical/módulo
   tenantSlug       String? // cache del slug
   status           String    @default("trial") // trial | active | suspended | cancelled
   activatedAt      DateTime  @default(now())
@@ -128,8 +132,10 @@ model CustomerModule {
   module   Module    @relation(fields: [moduleCode], references: [code], onDelete: Cascade)
   licenses License[]
 
-  @@unique([customerId, moduleCode])
+  // Único compuesto · permite Finance×KP y Finance×RT como rows separadas
+  @@unique([customerId, moduleCode, parentVerticalCode])
   @@index([moduleCode])
+  @@index([parentVerticalCode])
   @@index([status])
 }
 
