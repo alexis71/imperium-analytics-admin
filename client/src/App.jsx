@@ -7,6 +7,7 @@ import ChangePassword from './pages/ChangePassword';
 import Dashboard from './pages/Dashboard';
 import Modules from './pages/Modules';
 import Customers from './pages/Customers';
+import CustomerDetail from './pages/CustomerDetail';
 import Licenses from './pages/Licenses';
 import Webhooks from './pages/Webhooks';
 import AuditLog from './pages/AuditLog';
@@ -37,6 +38,7 @@ export default function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="customers" element={<Customers />} />
+        <Route path="customers/:id" element={<CustomerDetail />} />
         <Route path="verticales" element={<Modules />} />
         <Route path="modules" element={<Navigate to="/verticales" replace />} />
         <Route path="licenses" element={<Licenses />} />

@@ -119,18 +119,23 @@ router.patch('/:id', async (req, res) => {
 });
 
 // PATCH /customers/:id/modules/:moduleCode/suspend — pass-through al vertical
+// Soporta ?parentVerticalCode=kp para core modules (fin × kp · fin × rt · fin × nk)
 router.patch('/:id/modules/:moduleCode/suspend', async (req, res) => {
   const { id, moduleCode } = req.params;
+  const parentVerticalCode = req.query.parentVerticalCode || null;
   try {
-    const cm = await prisma.customerModule.findFirst({ where: { customerId: id, moduleCode } });
+    const cm = await prisma.customerModule.findFirst({
+      where: { customerId: id, moduleCode, parentVerticalCode },
+    });
     if (!cm?.tenantIdInModule) return res.status(404).json({ error: 'Tenant no vinculado' });
 
-    // Pass-through: llama al vertical con HMAC
-    await sendCommand(moduleCode, 'tenant.suspend', { tenantId: cm.tenantIdInModule, reason: req.body.reason || null });
+    // Pass-through al vertical (target = parentVerticalCode si es core module · si no, moduleCode)
+    const target = parentVerticalCode || moduleCode;
+    await sendCommand(target, 'tenant.suspend', { tenantId: cm.tenantIdInModule, reason: req.body.reason || null });
 
     await prisma.customerModule.update({ where: { id: cm.id }, data: { status: 'suspended' } });
     await audit(req, 'customer.module.suspend', 'CustomerModule', cm.id,
-      { moduleCode, tenantId: cm.tenantIdInModule },
+      { moduleCode, parentVerticalCode, tenantId: cm.tenantIdInModule },
       { customerId: id, moduleCode });
 
     res.json({ data: { ok: true } });
@@ -142,19 +147,170 @@ router.patch('/:id/modules/:moduleCode/suspend', async (req, res) => {
 // PATCH /customers/:id/modules/:moduleCode/unsuspend
 router.patch('/:id/modules/:moduleCode/unsuspend', async (req, res) => {
   const { id, moduleCode } = req.params;
+  const parentVerticalCode = req.query.parentVerticalCode || null;
   try {
-    const cm = await prisma.customerModule.findFirst({ where: { customerId: id, moduleCode } });
+    const cm = await prisma.customerModule.findFirst({
+      where: { customerId: id, moduleCode, parentVerticalCode },
+    });
     if (!cm?.tenantIdInModule) return res.status(404).json({ error: 'Tenant no vinculado' });
 
-    await sendCommand(moduleCode, 'tenant.unsuspend', { tenantId: cm.tenantIdInModule });
+    const target = parentVerticalCode || moduleCode;
+    await sendCommand(target, 'tenant.unsuspend', { tenantId: cm.tenantIdInModule });
     await prisma.customerModule.update({ where: { id: cm.id }, data: { status: 'active' } });
     await audit(req, 'customer.module.unsuspend', 'CustomerModule', cm.id,
-      { moduleCode },
+      { moduleCode, parentVerticalCode },
       { customerId: id, moduleCode });
 
     res.json({ data: { ok: true } });
   } catch (err) {
     res.status(502).json({ error: err.message });
+  }
+});
+
+// PATCH /customers/:id/modules/:moduleCode/extend — extiende license actual N días
+// Body: { days: number }
+router.patch('/:id/modules/:moduleCode/extend', async (req, res) => {
+  const { id, moduleCode } = req.params;
+  const parentVerticalCode = req.query.parentVerticalCode || null;
+  const days = Number(req.body.days);
+  if (!days || days <= 0) return res.status(400).json({ error: 'days requerido (entero positivo)' });
+  try {
+    const cm = await prisma.customerModule.findFirst({
+      where: { customerId: id, moduleCode, parentVerticalCode },
+      include: { licenses: { where: { status: 'active' }, orderBy: { expiresAt: 'desc' }, take: 1 } },
+    });
+    if (!cm) return res.status(404).json({ error: 'CustomerModule no existe' });
+    const lic = cm.licenses[0];
+    if (!lic) return res.status(404).json({ error: 'No hay license activa para extender' });
+
+    const now = new Date();
+    const base = lic.expiresAt > now ? lic.expiresAt : now;
+    const newExpiry = new Date(base.getTime() + days * 86400 * 1000);
+    const updated = await prisma.license.update({
+      where: { id: lic.id },
+      data: { expiresAt: newExpiry },
+    });
+
+    await audit(req, 'customer.module.extend', 'License', lic.id,
+      { moduleCode, parentVerticalCode, days, oldExpiresAt: lic.expiresAt, newExpiresAt: newExpiry },
+      { customerId: id, moduleCode });
+
+    res.json({ data: { ok: true, license: updated } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /customers/:id/modules/:moduleCode/change-tier — cambia tier + price de license activa
+// Body: { tier: string, priceMXN: number }
+router.patch('/:id/modules/:moduleCode/change-tier', async (req, res) => {
+  const { id, moduleCode } = req.params;
+  const parentVerticalCode = req.query.parentVerticalCode || null;
+  const { tier, priceMXN } = req.body;
+  if (!tier) return res.status(400).json({ error: 'tier requerido' });
+  if (priceMXN == null || isNaN(Number(priceMXN)) || Number(priceMXN) < 0) {
+    return res.status(400).json({ error: 'priceMXN requerido (>= 0)' });
+  }
+  try {
+    const cm = await prisma.customerModule.findFirst({
+      where: { customerId: id, moduleCode, parentVerticalCode },
+      include: { licenses: { where: { status: 'active' }, orderBy: { expiresAt: 'desc' }, take: 1 } },
+    });
+    if (!cm) return res.status(404).json({ error: 'CustomerModule no existe' });
+    const lic = cm.licenses[0];
+    if (!lic) return res.status(404).json({ error: 'No hay license activa' });
+
+    const updated = await prisma.license.update({
+      where: { id: lic.id },
+      data: { tier, priceMXN: Number(priceMXN) },
+    });
+
+    await audit(req, 'customer.module.change_tier', 'License', lic.id,
+      { moduleCode, parentVerticalCode, oldTier: lic.tier, newTier: tier, oldPrice: lic.priceMXN, newPrice: Number(priceMXN) },
+      { customerId: id, moduleCode });
+
+    res.json({ data: { ok: true, license: updated } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /customers/:id/module-matrix — payload listo para <ModuleMatrix mode="admin">
+// Returns { catalog, verticals, activations } shape compatible con Forge module-matrix
+router.get('/:id/module-matrix', async (req, res) => {
+  try {
+    const customerId = req.params.id;
+
+    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) return res.status(404).json({ error: 'Customer no existe' });
+
+    const allModules = await prisma.module.findMany({ where: { status: 'active' } });
+
+    // Heurística: módulos vertical = los que aparecen como CustomerModule con parentVerticalCode=NULL (kp/rt/nk/al/ad/iahb)
+    // módulos core = los que aparecen como parentVerticalCode != NULL (fin/hr/sales/inv/crm/...)
+    // En la BD Module no hay un flag isCore · usamos lista canónica.
+    const CORE_MODULE_CODES = new Set(['fin', 'fis', 'hr', 'sales', 'inv', 'crm', 'purchasing']);
+    const VERTICAL_MODULE_CODES = new Set(['kp', 'rt', 'nk', 'al']);
+
+    const cms = await prisma.customerModule.findMany({
+      where: { customerId },
+      include: {
+        module: { select: { code: true, name: true } },
+        licenses: { where: { status: 'active' }, orderBy: { expiresAt: 'desc' }, take: 1 },
+      },
+    });
+
+    // Verticales activos del customer
+    const verticalCMs = cms.filter(cm => !cm.parentVerticalCode && VERTICAL_MODULE_CODES.has(cm.moduleCode));
+    const ACCENT = { kp: '#10b981', rt: '#d4a24e', nk: '#3b82f6', al: '#7c3aed' };
+    const NAMES = { kp: 'Kompaws', rt: 'RoundTable', nk: 'NetKnight', al: 'Almena' };
+    const verticals = verticalCMs.map(cm => ({
+      moduleCode: cm.moduleCode,
+      moduleName: cm.module.name || NAMES[cm.moduleCode] || cm.moduleCode,
+      moduleAccent: ACCENT[cm.moduleCode] || '#94a3b8',
+      status: cm.status,
+      tier: cm.licenses[0]?.tier || null,
+    }));
+
+    // Catalog: módulos core registrados en Admin (filtra por código canónico)
+    const CORE_META = {
+      fin: { name: 'Finance', accent: '#16a34a', priceMXN: 99, description: 'Contabilidad · Balance · PyG · Libro Mayor' },
+      fis: { name: 'Fiscal/SAT', accent: '#ef4444', priceMXN: 149, description: 'Facturación · CFDI · timbrado' },
+      hr:  { name: 'RH/Nómina', accent: '#ec4899', priceMXN: 129, description: 'Empleados · nómina · prestaciones' },
+      sales: { name: 'CRM/Ventas', accent: '#a78bfa', priceMXN: 89, description: 'Pipeline · contactos · oportunidades' },
+      inv: { name: 'Almacén', accent: '#f59e0b', priceMXN: 79, description: 'Inventario · proveedores · stock' },
+      crm: { name: 'CRM', accent: '#06b6d4', priceMXN: 89, description: 'Customer relationship management' },
+    };
+    const catalog = {};
+    for (const m of allModules) {
+      if (CORE_MODULE_CODES.has(m.code)) {
+        const meta = CORE_META[m.code] || {};
+        catalog[m.code] = {
+          moduleCode: m.code,
+          name: meta.name || m.name,
+          accent: meta.accent || '#94a3b8',
+          priceMXN: meta.priceMXN || 0,
+          description: meta.description || '',
+        };
+      }
+    }
+
+    // Activations: cada CustomerModule con parentVerticalCode != null (core × vertical)
+    const activations = cms
+      .filter(cm => cm.parentVerticalCode && CORE_MODULE_CODES.has(cm.moduleCode))
+      .map(cm => ({
+        moduleCode: cm.moduleCode,
+        verticalCode: cm.parentVerticalCode,
+        status: cm.status,
+        tier: cm.licenses[0]?.tier || null,
+        priceMXN: cm.licenses[0]?.priceMXN || 0,
+        tenantSlug: cm.tenantSlug,
+        expiresAt: cm.licenses[0]?.expiresAt || null,
+      }));
+
+    res.json({ data: { catalog, verticals, activations } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -286,6 +442,31 @@ router.delete('/:id/modules/:moduleCode', async (req, res) => {
     res.json({ data: { ok: true, detachedTenantId: cm.tenantIdInModule, parentVerticalCode } });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /customers/:id/vertical-kpis/:moduleCode · proxy a vertical's /admin/finanzas-kpis
+// Usado por Hub para alimentar Preview cross-vertical con datos reales (N°20)
+router.get('/:id/vertical-kpis/:moduleCode', async (req, res) => {
+  const { id, moduleCode } = req.params;
+  try {
+    const cm = await prisma.customerModule.findFirst({
+      where: { customerId: id, moduleCode, parentVerticalCode: null },
+    });
+    if (!cm?.tenantIdInModule) {
+      return res.status(404).json({ error: 'Tenant no vinculado en este vertical' });
+    }
+
+    // Verticales con slug field (kp, rt) usan tenantSlug · NK usa tenantId
+    const useSlug = ['kp', 'rt'].includes(moduleCode) && cm.tenantSlug;
+    const qp = useSlug
+      ? `tenantSlug=${encodeURIComponent(cm.tenantSlug)}`
+      : `tenantId=${encodeURIComponent(cm.tenantIdInModule)}`;
+
+    const result = await pull(moduleCode, `/api/v1/admin/finanzas-kpis?${qp}`);
+    res.json({ data: result.data });
+  } catch (err) {
+    res.status(502).json({ error: err.message, code: 'VERTICAL_PULL_FAILED' });
   }
 });
 

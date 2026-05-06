@@ -12,4 +12,8 @@ export default defineConfig({
       },
     },
   },
+  // Forge extensions (file: protocol) tienen peer deps · dedupe fuerza una sola copia
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
 });

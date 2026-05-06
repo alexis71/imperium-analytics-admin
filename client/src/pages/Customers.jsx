@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Users, Plus, PauseCircle, PlayCircle, Link2, Unlink, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Users, Plus, PauseCircle, PlayCircle, Link2, Unlink, X, ExternalLink } from 'lucide-react';
 import api from '../services/api';
 
 export default function Customers() {
@@ -141,6 +142,10 @@ export default function Customers() {
                   color: c.status === 'active' ? '#10b981' : '#ef4444',
                   textTransform: 'uppercase',
                 }}>{c.status}</span>
+                <Link to={`/customers/${c.id}`} title="Ver detalle + matriz cores"
+                  style={{ marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 11, background: 'var(--ia-accent-soft)', color: 'var(--ia-accent)', border: '1px solid rgba(124,58,237,0.4)', borderRadius: 6, textDecoration: 'none' }}>
+                  <ExternalLink size={11} /> Matriz
+                </Link>
               </div>
 
               {c.modules.length > 0 && (
