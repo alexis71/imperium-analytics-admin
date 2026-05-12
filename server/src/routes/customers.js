@@ -247,9 +247,9 @@ router.get('/:id/module-matrix', async (req, res) => {
     const allModules = await prisma.module.findMany({ where: { status: 'active' } });
 
     // Heurística: módulos vertical = los que aparecen como CustomerModule con parentVerticalCode=NULL (kp/rt/nk/al/ad/iahb)
-    // módulos core = los que aparecen como parentVerticalCode != NULL (fin/hr/sales/inv/crm/...)
-    // En la BD Module no hay un flag isCore · usamos lista canónica.
-    const CORE_MODULE_CODES = new Set(['fin', 'fis', 'hr', 'sales', 'inv', 'crm', 'purchasing']);
+    // módulos core = los que aparecen como parentVerticalCode != NULL (fin/hr/sa/inv/crm/...)
+    // En la BD Module no hay un flag isCore · usamos lista canónica (convención Forge 4-chars · sa = Imperium Sales).
+    const CORE_MODULE_CODES = new Set(['fin', 'fis', 'hr', 'sa', 'inv', 'crm', 'purchasing']);
     const VERTICAL_MODULE_CODES = new Set(['kp', 'rt', 'nk', 'al']);
 
     const cms = await prisma.customerModule.findMany({
@@ -277,7 +277,7 @@ router.get('/:id/module-matrix', async (req, res) => {
       fin: { name: 'Finance', accent: '#16a34a', priceMXN: 99, description: 'Contabilidad · Balance · PyG · Libro Mayor' },
       fis: { name: 'Fiscal/SAT', accent: '#ef4444', priceMXN: 149, description: 'Facturación · CFDI · timbrado' },
       hr:  { name: 'RH/Nómina', accent: '#ec4899', priceMXN: 129, description: 'Empleados · nómina · prestaciones' },
-      sales: { name: 'CRM/Ventas', accent: '#a78bfa', priceMXN: 89, description: 'Pipeline · contactos · oportunidades' },
+      sa:  { name: 'Cotizaciones', accent: '#06b6d4', priceMXN: 499, description: 'Cotizaciones · propuestas · contratos · pipeline cross-vertical' },
       inv: { name: 'Almacén', accent: '#f59e0b', priceMXN: 79, description: 'Inventario · proveedores · stock' },
       crm: { name: 'CRM', accent: '#06b6d4', priceMXN: 89, description: 'Customer relationship management' },
     };
