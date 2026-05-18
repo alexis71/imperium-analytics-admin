@@ -37,9 +37,11 @@ const PLAN = [
   { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'hr',  parentVerticalCode: 'kp', tenantSlug: 'hr-demo-1-vet',  tier: 'herald', priceMXN: 129 },
   { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'hr',  parentVerticalCode: 'rt', tenantSlug: 'hr-demo-1-proj', tier: 'herald', priceMXN: 129 },
   { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'hr',  parentVerticalCode: 'nk', tenantSlug: 'hr-demo-1-it',   tier: 'herald', priceMXN: 129 },
-  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'crm', parentVerticalCode: 'kp', tenantSlug: 'crm-demo-1-multi-imperium-s-a-kp', tier: 'herald', priceMXN: 89  },
-  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'crm', parentVerticalCode: 'rt', tenantSlug: 'crm-demo-1-multi-imperium-s-a-rt', tier: 'herald', priceMXN: 89  },
-  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'crm', parentVerticalCode: 'nk', tenantSlug: 'crm-demo-1-multi-imperium-s-a-nk', tier: 'herald', priceMXN: 89  },
+  // N°48: CRM slugs reales (matchean tenants CRM N°48 provisión multi-tenant · espejo HR N°44)
+  // demo1 CRM × kp usa el seed original imperium_crm-demo (no se renombró · histórico)
+  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'crm', parentVerticalCode: 'kp', tenantSlug: 'imperium_crm-demo', tier: 'herald', priceMXN: 89  },
+  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'crm', parentVerticalCode: 'rt', tenantSlug: 'crm-demo-1-proj',  tier: 'herald', priceMXN: 89  },
+  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'crm', parentVerticalCode: 'nk', tenantSlug: 'crm-demo-1-it',    tier: 'herald', priceMXN: 89  },
 ];
 
 async function main() {
