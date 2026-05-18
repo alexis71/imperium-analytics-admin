@@ -404,6 +404,81 @@ router.post('/:id/modules', async (req, res) => {
       },
     });
 
+    // N°61 · C-arch auto-sync staff/customers post-provision · cierra E2E del flow
+    // Si provisionamos tenant HR/CRM + tenemos parentVerticalCode, jalar staff/customers
+    // desde el vertical origen y empujarlos al nuevo tenant automáticamente.
+    let synced = null;
+    if (autoProvision && provisioned && parentVerticalCode && ['hr', 'crm'].includes(moduleCode)) {
+      try {
+        // Resolver slug del vertical padre desde CustomerModule (donde parentVerticalCode IS NULL)
+        const parentCm = await prisma.customerModule.findFirst({
+          where: { customerId: id, moduleCode: parentVerticalCode, parentVerticalCode: null },
+          select: { tenantSlug: true },
+        });
+        const sourceTenantSlug = parentCm?.tenantSlug;
+
+        if (sourceTenantSlug) {
+          const VERTICAL_BASES = {
+            kp:    { url: process.env.KP_URL    || 'http://localhost:3006', secret: process.env.KP_EXTERNAL_READ_SECRET },
+            rt:    { url: process.env.RT_URL    || 'http://localhost:3003', secret: process.env.RT_EXTERNAL_READ_SECRET },
+            nk:    { url: process.env.NK_URL    || 'http://localhost:3001', secret: process.env.NK_EXTERNAL_READ_SECRET },
+            sales: { url: process.env.SALES_URL || 'http://localhost:3050', secret: process.env.SALES_EXTERNAL_READ_SECRET },
+          };
+          // RT/NK NO exportan customers (decisión N°42) · solo HR sync para esos verticales
+          const PULL_ENDPOINTS = {
+            'hr':  { kp: '/external/staff-for-hr',   rt: '/external/staff-for-hr',   nk: '/external/staff-for-hr',  sales: '/external/staff-for-hr' },
+            'crm': { kp: '/external/owners-for-crm', sales: '/external/customers-for-crm' /* rt/nk skip */ },
+          };
+          const TARGET_SYNC = {
+            'hr':  { url: process.env.HR_URL  || 'http://localhost:3040', secret: process.env.HR_EXTERNAL_WRITE_SECRET, path: '/external/employees/sync', payloadKey: 'employees' },
+            'crm': { url: process.env.CRM_URL || 'http://localhost:3060', secret: process.env.CRM_EXTERNAL_WRITE_SECRET, path: '/external/customers/sync', payloadKey: 'customers' },
+          };
+
+          const vcfg = VERTICAL_BASES[parentVerticalCode];
+          const pullPath = PULL_ENDPOINTS[moduleCode]?.[parentVerticalCode];
+          const target = TARGET_SYNC[moduleCode];
+
+          if (vcfg && vcfg.secret && pullPath && target?.secret) {
+            // Pull source data
+            const pullUrl = `${vcfg.url}${pullPath}?tenantSlug=${encodeURIComponent(sourceTenantSlug)}`;
+            const pullRes = await fetch(pullUrl, {
+              headers: { Authorization: `Bearer ${vcfg.secret}` },
+              signal: AbortSignal.timeout(8000),
+            });
+            if (pullRes.ok) {
+              const pullJ = await pullRes.json();
+              const items = pullJ.data || [];
+              if (items.length > 0) {
+                // Push to target module sync endpoint
+                const pushRes = await fetch(`${target.url}${target.path}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${target.secret}` },
+                  body: JSON.stringify({ tenantId: finalTenantIdInModule, [target.payloadKey]: items }),
+                  signal: AbortSignal.timeout(15000),
+                });
+                if (pushRes.ok) {
+                  const pushJ = await pushRes.json();
+                  synced = { source: parentVerticalCode, sourceTenant: sourceTenantSlug, pulled: items.length, ...pushJ.data };
+                } else {
+                  synced = { source: parentVerticalCode, error: `sync push ${pushRes.status}` };
+                }
+              } else {
+                synced = { source: parentVerticalCode, sourceTenant: sourceTenantSlug, pulled: 0, note: 'source sin data' };
+              }
+            } else {
+              synced = { source: parentVerticalCode, error: `pull ${pullRes.status}` };
+            }
+          } else {
+            synced = { source: parentVerticalCode, skipped: 'config missing or vertical no exporta este módulo (rt/nk no exportan customers)' };
+          }
+        } else {
+          synced = { skipped: 'parent vertical tenant slug no encontrado' };
+        }
+      } catch (e) {
+        synced = { error: e.message };
+      }
+    }
+
     // Crear License · por default trial 30d precio 0 si no especifican
     const { randomBytes } = require('crypto');
     const finalTier = tier || 'trial';
@@ -423,10 +498,10 @@ router.post('/:id/modules', async (req, res) => {
     });
 
     await audit(req, 'customer.module.attach', 'CustomerModule', cm.id,
-      { moduleCode, tenantIdInModule: finalTenantIdInModule, tier: finalTier, priceMXN: finalPrice, autoProvisioned: provisioned },
+      { moduleCode, tenantIdInModule: finalTenantIdInModule, tier: finalTier, priceMXN: finalPrice, autoProvisioned: provisioned, synced },
       { customerId: id, moduleCode });
 
-    res.status(201).json({ data: { customerModule: cm, license }, meta: { autoProvisioned: provisioned } });
+    res.status(201).json({ data: { customerModule: cm, license }, meta: { autoProvisioned: provisioned, synced } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
