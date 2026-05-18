@@ -32,9 +32,11 @@ const PLAN = [
   { customerId: CUST_MUSELECOM, email: 'alejandro@muselecom', moduleCode: 'crm', parentVerticalCode: 'kp', tenantSlug: 'crm-muselecom-kp', tier: 'herald', priceMXN: 0 },
 
   // ── demo1 · cross-vertical full (HR + CRM × cada vertical) ──
-  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'hr',  parentVerticalCode: 'kp', tenantSlug: 'hr-demo-1-multi-imperium-s-a-kp',  tier: 'herald', priceMXN: 129 },
-  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'hr',  parentVerticalCode: 'rt', tenantSlug: 'hr-demo-1-multi-imperium-s-a-rt',  tier: 'herald', priceMXN: 129 },
-  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'hr',  parentVerticalCode: 'nk', tenantSlug: 'hr-demo-1-multi-imperium-s-a-nk',  tier: 'herald', priceMXN: 129 },
+  // N°44: slugs reales (matchean tenants HR provisionados N°42 vía provision-hr-tenant-for-customer.js)
+  // Cierra hot-fix manual N°43 · próximos seeds nacen apuntando a tenants existentes
+  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'hr',  parentVerticalCode: 'kp', tenantSlug: 'hr-demo-1-vet',  tier: 'herald', priceMXN: 129 },
+  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'hr',  parentVerticalCode: 'rt', tenantSlug: 'hr-demo-1-proj', tier: 'herald', priceMXN: 129 },
+  { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'hr',  parentVerticalCode: 'nk', tenantSlug: 'hr-demo-1-it',   tier: 'herald', priceMXN: 129 },
   { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'crm', parentVerticalCode: 'kp', tenantSlug: 'crm-demo-1-multi-imperium-s-a-kp', tier: 'herald', priceMXN: 89  },
   { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'crm', parentVerticalCode: 'rt', tenantSlug: 'crm-demo-1-multi-imperium-s-a-rt', tier: 'herald', priceMXN: 89  },
   { customerId: CUST_DEMO1, email: 'demo1', moduleCode: 'crm', parentVerticalCode: 'nk', tenantSlug: 'crm-demo-1-multi-imperium-s-a-nk', tier: 'herald', priceMXN: 89  },
