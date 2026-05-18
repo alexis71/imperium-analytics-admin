@@ -21,5 +21,24 @@ export function adminAdapter(customerId) {
       `/customers/${customerId}/modules/${mc}/change-tier${qpv(vc)}`,
       { method: 'PATCH', body: JSON.stringify({ tier, priceMXN }) },
     ),
+    // N°60 · C-arch · activate/deactivate per (module × vertical) con auto-provision
+    activate: (mc, vc, opts = {}) => api.request(
+      `/customers/${customerId}/modules`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          moduleCode: mc,
+          parentVerticalCode: vc || null,
+          autoProvision: opts.autoProvision !== false, // default true · HR/CRM auto-create tenant
+          tier: opts.tier || 'trial',
+          priceMXN: opts.priceMXN ?? 0,
+          licenseDays: opts.licenseDays ?? 30,
+        }),
+      },
+    ),
+    deactivate: (mc, vc) => api.request(
+      `/customers/${customerId}/modules/${mc}${qpv(vc)}`,
+      { method: 'DELETE' },
+    ),
   };
 }

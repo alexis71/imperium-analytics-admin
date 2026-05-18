@@ -323,10 +323,17 @@ router.post('/:id/modules', async (req, res) => {
     moduleCode, parentVerticalCode = null,
     tenantIdInModule, tenantSlug,
     tier, priceMXN, licenseDays,
+    autoProvision = false, // N°60 · C-arch · auto-create tenant en módulo destino si miss tenantIdInModule
   } = req.body;
 
-  if (!moduleCode || !tenantIdInModule) {
-    return res.status(400).json({ error: 'moduleCode y tenantIdInModule requeridos' });
+  if (!moduleCode) {
+    return res.status(400).json({ error: 'moduleCode requerido' });
+  }
+
+  // N°60 · C-arch: si autoProvision=true y miss tenantIdInModule, auto-provision tenant
+  // (vs default behavior: require tenantIdInModule explícito · pattern N°41-N°48)
+  if (!autoProvision && !tenantIdInModule) {
+    return res.status(400).json({ error: 'tenantIdInModule requerido (o usar autoProvision=true)' });
   }
 
   try {
@@ -345,13 +352,54 @@ router.post('/:id/modules', async (req, res) => {
       return res.status(409).json({ error: `Customer ya tiene ${label} vinculado`, existingId: existing.id });
     }
 
+    // N°60 · C-arch · auto-provision para HR/CRM si flag set + miss tenantId
+    let finalTenantIdInModule = tenantIdInModule;
+    let finalTenantSlug = tenantSlug;
+    let provisioned = false;
+    if (autoProvision && !tenantIdInModule && ['hr', 'crm'].includes(moduleCode)) {
+      // Resolve target module endpoint + secret
+      const MODULE_ENDPOINTS = {
+        hr:  { url: process.env.HR_URL  || 'http://localhost:3040', secret: process.env.HR_EXTERNAL_WRITE_SECRET },
+        crm: { url: process.env.CRM_URL || 'http://localhost:3060', secret: process.env.CRM_EXTERNAL_WRITE_SECRET },
+      };
+      const cfg = MODULE_ENDPOINTS[moduleCode];
+      if (!cfg.secret) return res.status(500).json({ error: `${moduleCode.toUpperCase()}_EXTERNAL_WRITE_SECRET no configurado en Admin .env` });
+
+      // Naming convention: <module>-<customer-slug-base>-<vertical-suffix>
+      const customerSlugBase = (customer.legalName || 'customer').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+      const verticalSuffix = parentVerticalCode ? `-${parentVerticalCode}` : '';
+      const newSlug = `${moduleCode}-${customerSlugBase}${verticalSuffix}`;
+      const customerName = `Imperium ${moduleCode.toUpperCase()} · ${customer.legalName}${parentVerticalCode ? ` · ${parentVerticalCode.toUpperCase()}` : ''}`;
+      const ownerEmail = customer.contactEmail || `${customerSlugBase}@local.com`;
+      const ownerName = customer.contactName || customer.legalName;
+
+      try {
+        const provRes = await fetch(`${cfg.url}/api/v1/external/tenants`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.secret}` },
+          body: JSON.stringify({ slug: newSlug, name: customerName, ownerEmail, ownerName, tier: tier || 'herald', verticalCode: parentVerticalCode, verticalTenantSlug: null }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!provRes.ok) {
+          const txt = await provRes.text();
+          return res.status(502).json({ error: `Auto-provision ${moduleCode} falló: ${provRes.status}`, detail: txt.slice(0, 300) });
+        }
+        const provData = await provRes.json();
+        finalTenantIdInModule = provData.data?.id;
+        finalTenantSlug = provData.data?.slug;
+        provisioned = true;
+      } catch (e) {
+        return res.status(502).json({ error: `Auto-provision ${moduleCode} unreachable: ${e.message}` });
+      }
+    }
+
     const cm = await prisma.customerModule.create({
       data: {
         customerId: id,
         moduleCode,
         parentVerticalCode,
-        tenantIdInModule,
-        tenantSlug: tenantSlug || null,
+        tenantIdInModule: finalTenantIdInModule,
+        tenantSlug: finalTenantSlug || null,
         status: 'active',
       },
     });
@@ -375,10 +423,10 @@ router.post('/:id/modules', async (req, res) => {
     });
 
     await audit(req, 'customer.module.attach', 'CustomerModule', cm.id,
-      { moduleCode, tenantIdInModule, tier: finalTier, priceMXN: finalPrice },
+      { moduleCode, tenantIdInModule: finalTenantIdInModule, tier: finalTier, priceMXN: finalPrice, autoProvisioned: provisioned },
       { customerId: id, moduleCode });
 
-    res.status(201).json({ data: { customerModule: cm, license } });
+    res.status(201).json({ data: { customerModule: cm, license }, meta: { autoProvisioned: provisioned } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
