@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Boxes, Key, FileText, Webhook, History, Settings, LogOut, ShieldOff } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Boxes, Key, FileText, Webhook, History, Settings, LogOut, ShieldOff, KeyRound } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 const NAV = [
@@ -71,6 +71,16 @@ export default function Layout() {
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--ia-fg)', marginBottom: 2 }}>{user?.name}</div>
           <div style={{ fontSize: 10, color: 'var(--ia-muted)', marginBottom: 10 }}>{user?.email}</div>
+          {/* N°66 · link a /change-password (route ya existe fuera de Protected · UI gap cerrado · permite cambio voluntario post-onboarding) */}
+          <button onClick={() => nav('/change-password')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontSize: 12, color: 'var(--ia-muted)',
+              background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+              marginBottom: 8,
+            }}>
+            <KeyRound size={12} /> Cambiar contraseña
+          </button>
           <button onClick={async () => { await logout(); nav('/login'); }}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
