@@ -425,13 +425,14 @@ router.post('/:id/modules', async (req, res) => {
             sales: { url: process.env.SALES_URL || 'http://localhost:3050', secret: process.env.SALES_EXTERNAL_READ_SECRET },
           };
           // RT/NK NO exportan customers (decisión N°42) · solo HR sync para esos verticales
+          // N°66 · fix bug E2E · pull+push URLs faltaban prefix /api/v1/ (verticales montan /external bajo /api/v1)
           const PULL_ENDPOINTS = {
-            'hr':  { kp: '/external/staff-for-hr',   rt: '/external/staff-for-hr',   nk: '/external/staff-for-hr',  sales: '/external/staff-for-hr' },
-            'crm': { kp: '/external/owners-for-crm', sales: '/external/customers-for-crm' /* rt/nk skip */ },
+            'hr':  { kp: '/api/v1/external/staff-for-hr',   rt: '/api/v1/external/staff-for-hr',   nk: '/api/v1/external/staff-for-hr',  sales: '/api/v1/external/staff-for-hr' },
+            'crm': { kp: '/api/v1/external/owners-for-crm', sales: '/api/v1/external/customers-for-crm' /* rt/nk skip */ },
           };
           const TARGET_SYNC = {
-            'hr':  { url: process.env.HR_URL  || 'http://localhost:3040', secret: process.env.HR_EXTERNAL_WRITE_SECRET, path: '/external/employees/sync', payloadKey: 'employees' },
-            'crm': { url: process.env.CRM_URL || 'http://localhost:3060', secret: process.env.CRM_EXTERNAL_WRITE_SECRET, path: '/external/customers/sync', payloadKey: 'customers' },
+            'hr':  { url: process.env.HR_URL  || 'http://localhost:3040', secret: process.env.HR_EXTERNAL_WRITE_SECRET, path: '/api/v1/external/employees/sync', payloadKey: 'employees' },
+            'crm': { url: process.env.CRM_URL || 'http://localhost:3060', secret: process.env.CRM_EXTERNAL_WRITE_SECRET, path: '/api/v1/external/customers/sync', payloadKey: 'customers' },
           };
 
           const vcfg = VERTICAL_BASES[parentVerticalCode];
