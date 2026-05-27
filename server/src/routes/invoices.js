@@ -126,10 +126,32 @@ router.post('/:id/payments', async (req, res) => {
       });
     }
 
-    await audit(req, 'invoice.payment.add', 'Invoice', inv.id,
-      { amountMXN, method, newStatus }, { customerId: inv.customerId });
+    // N°80 Fase B2 · si Invoice transition a 'paid', extender License.expiresAt += 30d
+    // (auto-renew implícito · cada pago extiende 30 días desde el expiresAt actual o hoy si ya venció)
+    const extendedLicenses = [];
+    if (newStatus === 'paid' && inv.status !== 'paid') {
+      const items = Array.isArray(inv.items) ? inv.items : [];
+      const customerModuleIds = [...new Set(items.map(it => it.customerModuleId).filter(Boolean))];
+      for (const cmId of customerModuleIds) {
+        const lic = await prisma.license.findFirst({
+          where: { customerModuleId: cmId, status: 'active' },
+          orderBy: { expiresAt: 'desc' },
+        });
+        if (!lic) continue;
+        const baseDate = lic.expiresAt > new Date() ? lic.expiresAt : new Date();
+        const newExpiresAt = new Date(baseDate.getTime() + 30 * 86400 * 1000);
+        await prisma.license.update({
+          where: { id: lic.id },
+          data: { expiresAt: newExpiresAt },
+        });
+        extendedLicenses.push({ id: lic.id, customerModuleId: cmId, oldExpiresAt: lic.expiresAt, newExpiresAt });
+      }
+    }
 
-    res.json({ data: { payment, invoiceStatus: newStatus, paidTotal: paidNow } });
+    await audit(req, 'invoice.payment.add', 'Invoice', inv.id,
+      { amountMXN, method, newStatus, extendedLicenses }, { customerId: inv.customerId });
+
+    res.json({ data: { payment, invoiceStatus: newStatus, paidTotal: paidNow, extendedLicenses } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
