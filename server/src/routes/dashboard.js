@@ -9,6 +9,9 @@ router.get('/stats', auth(), async (req, res) => {
     const now = new Date();
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const nextMonth  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    // N°80 Fase B3 · trend mes vs anterior
+    const prevMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const prevMonthEnd   = monthStart;
 
     const [
       customers,
@@ -20,6 +23,9 @@ router.get('/stats', auth(), async (req, res) => {
       monthInvoices,
       monthPayments,
       unpaidInvoices,
+      prevMonthInvoices,    // N°80 B3
+      prevMonthPayments,    // N°80 B3
+      paidInvoicesThisMonth, // N°80 B3 · # invoices paid (reconciliations signal)
     ] = await Promise.all([
       prisma.customer.count({ where: { status: 'active' } }),
       prisma.module.count({ where: { status: 'active' } }),
@@ -52,6 +58,18 @@ router.get('/stats', auth(), async (req, res) => {
       prisma.invoice.count({
         where: { status: { in: ['sent', 'overdue'] } },
       }),
+      // N°80 B3 · prev-month comparators
+      prisma.invoice.findMany({
+        where: { periodStart: { gte: prevMonthStart, lt: prevMonthEnd } },
+        select: { totalMXN: true },
+      }),
+      prisma.payment.aggregate({
+        where: { paidAt: { gte: prevMonthStart, lt: prevMonthEnd } },
+        _sum: { amountMXN: true },
+      }),
+      prisma.invoice.count({
+        where: { status: 'paid', updatedAt: { gte: monthStart, lt: nextMonth } },
+      }),
     ]);
 
     const mrrMXN = activeCustomerModules.reduce((sum, cm) => {
@@ -61,6 +79,15 @@ router.get('/stats', auth(), async (req, res) => {
 
     const monthInvoicedMXN = monthInvoices.reduce((s, i) => s + i.totalMXN, 0);
     const monthPaidMXN = monthPayments._sum.amountMXN || 0;
+    // N°80 B3
+    const prevMonthInvoicedMXN = prevMonthInvoices.reduce((s, i) => s + i.totalMXN, 0);
+    const prevMonthPaidMXN = prevMonthPayments._sum.amountMXN || 0;
+    const invoicedDeltaPct = prevMonthInvoicedMXN > 0
+      ? Math.round(((monthInvoicedMXN - prevMonthInvoicedMXN) / prevMonthInvoicedMXN) * 100)
+      : null;
+    const paidDeltaPct = prevMonthPaidMXN > 0
+      ? Math.round(((monthPaidMXN - prevMonthPaidMXN) / prevMonthPaidMXN) * 100)
+      : null;
 
     const upcomingExpirations = await prisma.license.findMany({
       where: {
@@ -83,6 +110,12 @@ router.get('/stats', auth(), async (req, res) => {
           monthInvoicedMXN,
           monthPaidMXN,
           unpaidInvoices,
+          // N°80 B3 · trend mes vs anterior + reconciliations signal
+          prevMonthInvoicedMXN,
+          prevMonthPaidMXN,
+          invoicedDeltaPct,
+          paidDeltaPct,
+          paidInvoicesThisMonth,
         },
         recentEvents,
         upcomingExpirations: upcomingExpirations.map((l) => ({

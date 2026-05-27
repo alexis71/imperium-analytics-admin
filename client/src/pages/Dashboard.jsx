@@ -20,12 +20,25 @@ export default function Dashboard() {
         </p>
       </header>
 
-      {/* Financial KPIs */}
+      {/* Financial KPIs · N°80 B3 · agrega trend mes vs anterior + reconciliations signal */}
       <div style={{ fontSize: 11, color: 'var(--ia-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Financiero</div>
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 24 }}>
         <Kpi icon={TrendingUp} label="MRR · activo" value={`$${(k.mrrMXN ?? 0).toLocaleString('es-MX')}`} accent />
-        <Kpi icon={DollarSign} label="Facturado mes actual" value={`$${(k.monthInvoicedMXN ?? 0).toLocaleString('es-MX')}`} />
-        <Kpi icon={DollarSign} label="Pagado mes actual" value={`$${(k.monthPaidMXN ?? 0).toLocaleString('es-MX')}`} success />
+        <Kpi
+          icon={DollarSign}
+          label="Facturado mes actual"
+          value={`$${(k.monthInvoicedMXN ?? 0).toLocaleString('es-MX')}`}
+          delta={k.invoicedDeltaPct}
+          deltaSub={`vs $${(k.prevMonthInvoicedMXN ?? 0).toLocaleString('es-MX')} mes pasado`}
+        />
+        <Kpi
+          icon={DollarSign}
+          label="Pagado mes actual"
+          value={`$${(k.monthPaidMXN ?? 0).toLocaleString('es-MX')}`}
+          delta={k.paidDeltaPct}
+          deltaSub={`${k.paidInvoicesThisMonth ?? 0} facturas pagadas este mes`}
+          success
+        />
         <Kpi icon={FileClock} label="Facturas por cobrar" value={k.unpaidInvoices ?? 0} warn={(k.unpaidInvoices ?? 0) > 0} />
       </section>
 
@@ -88,8 +101,13 @@ export default function Dashboard() {
   );
 }
 
-function Kpi({ icon: Icon, label, value, accent, success, warn }) {
+function Kpi({ icon: Icon, label, value, accent, success, warn, delta, deltaSub }) {
   const color = accent ? 'var(--ia-accent)' : success ? '#10b981' : warn ? '#f59e0b' : 'var(--ia-accent)';
+  // N°80 B3 · delta = % change vs prev period (null = sin comparativo)
+  const hasDelta = typeof delta === 'number';
+  const isUp = delta > 0;
+  const isDown = delta < 0;
+  const deltaColor = isUp ? '#10b981' : isDown ? '#fca5a5' : 'var(--ia-muted)';
   return (
     <div className="sc" style={{ padding: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -97,6 +115,18 @@ function Kpi({ icon: Icon, label, value, accent, success, warn }) {
         <span style={{ fontSize: 10, color: 'var(--ia-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
       </div>
       <div style={{ fontSize: 22, fontWeight: 600, color: warn ? '#fbbf24' : 'var(--ia-fg)' }}>{value}</div>
+      {(hasDelta || deltaSub) && (
+        <div style={{ marginTop: 4, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          {hasDelta && (
+            <span style={{ fontSize: 10, fontWeight: 600, color: deltaColor }}>
+              {isUp ? '↑' : isDown ? '↓' : '='} {Math.abs(delta)}%
+            </span>
+          )}
+          {deltaSub && (
+            <span style={{ fontSize: 9, color: 'var(--ia-muted)' }}>{deltaSub}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
