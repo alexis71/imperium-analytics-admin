@@ -485,6 +485,9 @@ router.post('/:id/modules', async (req, res) => {
     const finalTier = tier || 'trial';
     const finalPrice = priceMXN != null ? Number(priceMXN) : 0;
     const finalDays = licenseDays != null ? Number(licenseDays) : 30;
+    // N°80 Fase B1 · billingMode default 'prepaid' · caller puede override pasando billingMode en body
+    const finalBillingMode = req.body?.billingMode && ['prepaid', 'arrears'].includes(req.body.billingMode)
+      ? req.body.billingMode : 'prepaid';
 
     const license = await prisma.license.create({
       data: {
@@ -492,17 +495,48 @@ router.post('/:id/modules', async (req, res) => {
         tier: finalTier,
         key: `${moduleCode.toUpperCase()}-${finalTier.toUpperCase()}-${randomBytes(4).toString('hex').toUpperCase()}`,
         priceMXN: finalPrice,
+        billingMode: finalBillingMode,
         activatedAt: new Date(),
         expiresAt: new Date(Date.now() + finalDays * 86400 * 1000),
         status: 'active',
       },
     });
 
+    // N°80 Fase B1 · auto-generar Invoice draft al activar (License → Invoice hook)
+    // Skip si priceMXN=0 (trials gratis · no genera invoice)
+    let activationInvoice = null;
+    if (finalPrice > 0) {
+      try {
+        const { generateActivationInvoice } = require('../utils/activation-invoice');
+        const result = await generateActivationInvoice({
+          customerId: id,
+          customerModule: cm,
+          license,
+          module,
+        });
+        activationInvoice = {
+          id: result.invoice.id,
+          numero: result.invoice.numero,
+          totalMXN: result.invoice.totalMXN,
+          status: result.invoice.status,
+          dueAt: result.invoice.dueAt,
+          created: result.created,
+        };
+      } catch (invErr) {
+        // No abortamos activación si falla invoice · solo log + audit warning
+        const logger = require('../utils/logger');
+        logger?.warn?.('activation-invoice.fail', {
+          customerId: id, moduleCode, error: invErr.message,
+        });
+        activationInvoice = { error: invErr.message };
+      }
+    }
+
     await audit(req, 'customer.module.attach', 'CustomerModule', cm.id,
-      { moduleCode, tenantIdInModule: finalTenantIdInModule, tier: finalTier, priceMXN: finalPrice, autoProvisioned: provisioned, synced },
+      { moduleCode, tenantIdInModule: finalTenantIdInModule, tier: finalTier, priceMXN: finalPrice, billingMode: finalBillingMode, autoProvisioned: provisioned, synced, activationInvoice },
       { customerId: id, moduleCode });
 
-    res.status(201).json({ data: { customerModule: cm, license }, meta: { autoProvisioned: provisioned, synced } });
+    res.status(201).json({ data: { customerModule: cm, license, activationInvoice }, meta: { autoProvisioned: provisioned, synced } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

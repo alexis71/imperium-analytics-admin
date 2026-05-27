@@ -147,6 +147,7 @@ model License {
   tier             String // scribe, herald, steward, regent (RT) · starter, pro, business, enterprise (NK)
   key              String   @unique
   priceMXN         Int
+  billingMode      String   @default("prepaid") // prepaid (charge on activate) | arrears (charge after period · N°80 Fase B1)
   activatedAt      DateTime @default(now())
   expiresAt        DateTime
   status           String   @default("active") // active | expired | cancelled
