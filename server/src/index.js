@@ -80,6 +80,7 @@ app.use('/api/v1/licenses', require('./routes/licenses'));
 app.use('/api/v1/webhooks-inbox', require('./routes/webhooks-inbox'));
 app.use('/api/v1/audit-log', require('./routes/audit'));
 app.use('/api/v1/invoices', require('./routes/invoices'));
+app.use('/api/v1/billing-proxy', require('./routes/billing-proxy')); // N°80 C2 · Admin → Hub reconcile
 app.use('/api/v1/settings', require('./routes/settings'));
 app.use('/api/v1/admin-override', require('./routes/admin-override'));
 

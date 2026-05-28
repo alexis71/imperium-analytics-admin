@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Download, DollarSign, Plus, X } from 'lucide-react';
+import { ArrowLeft, Download, DollarSign, Plus, X, RefreshCcw, Loader2, Webhook, CheckCircle2, AlertCircle } from 'lucide-react';
 import api from '../services/api';
 
 export default function InvoiceDetail() {
@@ -9,13 +9,39 @@ export default function InvoiceDetail() {
   const [payModal, setPayModal] = useState(false);
   const [form, setForm] = useState({ amountMXN: '', method: 'transferencia', reference: '', notes: '' });
   const [err, setErr] = useState(null);
+  // N°80 C2 · manual reconcile + webhooks de este cliente
+  const [webhooks, setWebhooks] = useState(null);
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileMsg, setReconcileMsg] = useState(null);
 
   const load = async () => {
     const { data } = await api.request(`/invoices/${id}`);
     setInv(data);
+    // N°80 C2 · cargar PaymentEvents del customer vía proxy a Hub
+    if (data?.customer?.id) {
+      try {
+        const { data: ev } = await api.request(`/billing-proxy/customer-webhooks/${data.customer.id}`);
+        setWebhooks(ev);
+      } catch (e) { setWebhooks({ error: e.message }); }
+    }
   };
 
   useEffect(() => { load(); }, [id]);
+
+  // N°80 C2 · forzar reconcile (cron-equivalent on-demand)
+  const forceReconcile = async () => {
+    setReconciling(true); setReconcileMsg(null);
+    try {
+      const { data } = await api.request('/billing-proxy/reconcile', { method: 'POST' });
+      setReconcileMsg({ type: 'ok', text: `Reconcile · ${data.matched} matched · ${data.skipped} skip · ${data.checked} revisados` });
+      await load();
+    } catch (e) {
+      setReconcileMsg({ type: 'err', text: e.message });
+    } finally {
+      setReconciling(false);
+      setTimeout(() => setReconcileMsg(null), 6000);
+    }
+  };
 
   const registerPayment = async (e) => {
     e.preventDefault();
@@ -160,6 +186,72 @@ export default function InvoiceDetail() {
         </div>
       )}
 
+      {/* N°80 C2 · Webhooks del cliente + forzar reconcile */}
+      <div className="sc" style={{ padding: 20, marginTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: 'var(--ia-muted)', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Webhook size={13} /> Pagos vía webhook (MP / Stripe)
+          </div>
+          <button onClick={forceReconcile} disabled={reconciling}
+            style={{
+              fontSize: 12, padding: '6px 12px', borderRadius: 6,
+              background: 'rgba(124,58,237,0.12)', color: 'var(--ia-accent)',
+              border: '1px solid rgba(124,58,237,0.35)', cursor: reconciling ? 'wait' : 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}
+            title="Fuerza un pase de reconciliación en Hub · matchea PaymentEvents pendientes con invoices">
+            {reconciling ? <Loader2 size={12} className="animate-spin" /> : <RefreshCcw size={12} />}
+            {reconciling ? 'Reconciliando…' : 'Forzar reconciliación'}
+          </button>
+        </div>
+
+        {reconcileMsg && (
+          <div style={{
+            padding: '8px 12px', borderRadius: 6, marginBottom: 10, fontSize: 12,
+            background: reconcileMsg.type === 'ok' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+            color: reconcileMsg.type === 'ok' ? '#6ee7b7' : '#fca5a5',
+            border: `1px solid ${reconcileMsg.type === 'ok' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+          }}>{reconcileMsg.text}</div>
+        )}
+
+        {webhooks?.error ? (
+          <div style={{ fontSize: 12, color: '#fca5a5', display: 'flex', gap: 6, alignItems: 'center' }}>
+            <AlertCircle size={13} /> Hub no accesible: {webhooks.error}
+          </div>
+        ) : !webhooks ? (
+          <div style={{ fontSize: 12, color: 'var(--ia-muted)' }}>Cargando webhooks…</div>
+        ) : webhooks.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--ia-muted)' }}>
+            Sin PaymentEvents para este cliente todavía · llegan cuando MP/Stripe notifican un pago.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {webhooks.map((w) => {
+              const matchedThis = w.matchedInvoiceNumero === inv.numero;
+              return (
+                <div key={w.id} style={{
+                  display: 'flex', gap: 10, alignItems: 'center', fontSize: 12,
+                  padding: '8px 10px', borderRadius: 6,
+                  background: matchedThis ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.02)',
+                  border: `1px solid ${matchedThis ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.05)'}`,
+                }}>
+                  <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: 'rgba(124,58,237,0.15)', color: 'var(--ia-accent)', textTransform: 'uppercase' }}>{w.provider}</span>
+                  <span style={{ fontWeight: 500 }}>${(w.amountMxn ?? 0).toLocaleString('es-MX')}</span>
+                  <span style={{ color: 'var(--ia-muted)' }}>{w.status || '—'}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ia-muted)' }}>
+                    {w.reconciledAt
+                      ? <span style={{ color: matchedThis ? '#34d399' : '#94a3b8', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <CheckCircle2 size={11} /> {w.matchedInvoiceNumero || 'reconciled'}
+                        </span>
+                      : <span style={{ color: '#fbbf24' }}>{w.reconcileSkipReason ? 'skip: ' + w.reconcileSkipReason.slice(0, 30) : 'pendiente'}</span>}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {payModal && (
         <div onClick={() => setPayModal(false)} style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
@@ -180,6 +272,7 @@ export default function InvoiceDetail() {
               <option value="transferencia">Transferencia</option>
               <option value="tarjeta">Tarjeta</option>
               <option value="efectivo">Efectivo</option>
+              <option value="mercadopago">MercadoPago</option>
               <option value="stripe">Stripe</option>
               <option value="otro">Otro</option>
             </select>
