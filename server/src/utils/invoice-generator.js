@@ -28,9 +28,15 @@ async function nextInvoiceNumber(year, month) {
 
 /**
  * Construye items + totales desde los CustomerModule activos del customer.
+ *
+ * N°80 · opts.skipActivatedInPeriod + periodStart/End: excluye módulos cuya License
+ * fue activada DENTRO del período facturado. Razón: la factura de activación (B1)
+ * ya cobró el primer mes de ese módulo · sin esto el mensual lo cobraría doble.
+ * La mensual toma el relevo a partir del mes siguiente.
+ *
  * @returns { items[], subtotalMXN, ivaMXN, totalMXN }
  */
-async function buildItems(customerId) {
+async function buildItems(customerId, { skipActivatedInPeriod = false, periodStart = null, periodEnd = null } = {}) {
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
     include: {
@@ -55,6 +61,11 @@ async function buildItems(customerId) {
   for (const cm of customer.modules) {
     const license = cm.licenses[0];
     if (!license) continue;
+    // N°80 · anti-doble-cobro: si la licencia se activó en este período, B1 ya lo cubrió → skip
+    if (skipActivatedInPeriod && periodStart && periodEnd) {
+      const act = new Date(license.activatedAt);
+      if (act >= periodStart && act < periodEnd) continue;
+    }
     const description = `${cm.module.name} · tier ${license.tier}`;
     const amount = license.priceMXN || 0;
     items.push({
@@ -80,8 +91,12 @@ async function buildItems(customerId) {
 /**
  * Genera invoice en estado draft para el customer y período dado.
  * Idempotente por customer+period: si ya existe, retorna la previa.
+ *
+ * @param {object} [opts]
+ * @param {boolean} [opts.skipActivatedInPeriod] excluye módulos cubiertos por su factura B1 (ver buildItems)
+ * @param {boolean} [opts.skipEmptyOk] si tras el filtro no quedan items, retorna {created:false, skipped:true} en vez de throw
  */
-async function generateInvoice(customerId, year, month) {
+async function generateInvoice(customerId, year, month, opts = {}) {
   const { start, end } = periodRange(year, month);
 
   const existing = await prisma.invoice.findFirst({
@@ -89,8 +104,11 @@ async function generateInvoice(customerId, year, month) {
   });
   if (existing) return { invoice: existing, created: false };
 
-  const { customer, items, subtotalMXN, ivaMXN, totalMXN } = await buildItems(customerId);
+  const { customer, items, subtotalMXN, ivaMXN, totalMXN } = await buildItems(customerId, {
+    skipActivatedInPeriod: opts.skipActivatedInPeriod, periodStart: start, periodEnd: end,
+  });
   if (items.length === 0) {
+    if (opts.skipEmptyOk) return { invoice: null, created: false, skipped: true, reason: 'sin módulos facturables (cubiertos por activación o sin licencia)' };
     throw new Error(`Customer ${customer.legalName} no tiene módulos activos con licencias vigentes`);
   }
 
@@ -117,11 +135,14 @@ async function generateInvoice(customerId, year, month) {
 
 /**
  * Genera facturas para TODOS los customers con módulos activos en el período.
- * @returns { generated, skipped, errors }
+ * @param {object} [opts] reenviado a generateInvoice (skipActivatedInPeriod · skipEmptyOk)
+ * @returns { generated, skipped, errors, total }
  */
-async function generateAllForPeriod(year, month) {
+async function generateAllForPeriod(year, month, opts = {}) {
+  const where = { status: 'active', modules: { some: { status: 'active' } } };
+  if (opts.excludeCustomerIds?.length) where.id = { notIn: opts.excludeCustomerIds }; // N°80 · excluir demos/internos
   const customers = await prisma.customer.findMany({
-    where: { status: 'active', modules: { some: { status: 'active' } } },
+    where,
     select: { id: true, legalName: true },
   });
 
@@ -131,7 +152,7 @@ async function generateAllForPeriod(year, month) {
 
   for (const c of customers) {
     try {
-      const { created } = await generateInvoice(c.id, year, month);
+      const { created } = await generateInvoice(c.id, year, month, opts);
       if (created) generated++;
       else skipped++;
     } catch (err) {
