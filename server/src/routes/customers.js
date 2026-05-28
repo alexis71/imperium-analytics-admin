@@ -513,6 +513,7 @@ router.post('/:id/modules', async (req, res) => {
           customerModule: cm,
           license,
           module,
+          trialDays: req.body?.trialDays != null ? Number(req.body.trialDays) : 0, // N°80 · difiere cobro durante trial vertical
         });
         activationInvoice = {
           id: result.invoice.id,

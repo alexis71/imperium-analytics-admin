@@ -6,9 +6,11 @@
  *
  * Decisión arquitectónica:
  *  - 1 invoice por activación (no mensual consolidado · ese sigue funcionando por separado)
- *  - billingMode='prepaid' (default) → dueAt = activatedAt (cobro inmediato)
+ *  - billingMode='prepaid' (default) → dueAt = inicio del período facturable (cobro inmediato)
  *  - billingMode='arrears'           → dueAt = expiresAt + 15d (gracia post-período)
- *  - periodStart = License.activatedAt · periodEnd = License.expiresAt
+ *  - periodStart = License.activatedAt + trialDays · periodEnd = License.expiresAt
+ *  - N°80 · trialDays > 0 (verticales · "14 días gratis") → el período facturable arranca
+ *           DESPUÉS del trial · prepaid vence al cerrar el trial (no revenue fantasma)
  *  - IVA 16% si Customer no es tax-exempt
  *  - numero IA-YYYY-MM-NNNN siguiendo el mismo correlativo mensual
  *  - Falla NO debe bloquear activación · caller envuelve en try/catch + log
@@ -40,7 +42,7 @@ async function nextInvoiceNumber(date = new Date()) {
  * @param {object} ctx.module                Module catalog row (con code · name)
  * @returns {Promise<{ invoice, items, totals }>}
  */
-async function generateActivationInvoice({ customerId, customerModule, license, module }) {
+async function generateActivationInvoice({ customerId, customerModule, license, module, trialDays = 0 }) {
   // 1. Customer + tax exempt
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
@@ -73,11 +75,13 @@ async function generateActivationInvoice({ customerId, customerModule, license, 
   const total = subtotal + iva;
 
   // 4. periodStart/End desde License · dueAt según billingMode
-  const periodStart = license.activatedAt;
+  // N°80 · el período facturable arranca tras el trial (trialDays gratis · cobra después)
+  const trialMs = (Number(trialDays) > 0 ? Number(trialDays) : 0) * 86400 * 1000;
+  const periodStart = new Date(new Date(license.activatedAt).getTime() + trialMs);
   const periodEnd = license.expiresAt;
   const dueAt = license.billingMode === 'arrears'
-    ? new Date(periodEnd.getTime() + 15 * 86400 * 1000) // 15d gracia post-período
-    : periodStart;                                       // prepaid · due immediately
+    ? new Date(new Date(periodEnd).getTime() + 15 * 86400 * 1000) // 15d gracia post-período
+    : periodStart;                                                // prepaid · vence al iniciar período pagado (post-trial si lo hay)
 
   // 5. Numero correlativo
   const numero = await nextInvoiceNumber(new Date());
@@ -107,7 +111,7 @@ async function generateActivationInvoice({ customerId, customerModule, license, 
       status: 'draft',
       items,
       dueAt,
-      notes: `Activación ${customerModule.moduleCode}${verticalSuffix} · ${license.billingMode === 'prepaid' ? 'pago adelantado' : 'cobro al cierre del período'}`,
+      notes: `Activación ${customerModule.moduleCode}${verticalSuffix} · ${license.billingMode === 'prepaid' ? 'pago adelantado' : 'cobro al cierre del período'}${trialMs > 0 ? ` · ${trialDays}d trial gratis (cobra ${periodStart.toISOString().slice(0, 10)})` : ''}`,
     },
   });
 
