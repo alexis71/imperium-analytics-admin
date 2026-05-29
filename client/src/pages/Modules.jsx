@@ -49,7 +49,7 @@ export default function Modules() {
             Apps de industria registradas · cliente se suscribe a una o más
           </p>
           <p style={{ margin: '6px 0 0', fontSize: 11, color: '#64748b' }}>
-            Verticales ≠ módulos core (Finance, HR, Sales, Inventory, CRM) · estos últimos llegan en Fase G y se activan DENTRO de cada vertical
+            Verticales ≠ módulos core (Finance · Sales · Inventory · Purchasing · HR · CRM) · los cores se activan DENTRO de cada vertical desde el Hub (matriz por customer)
           </p>
         </div>
       </header>

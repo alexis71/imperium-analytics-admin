@@ -11,7 +11,6 @@ const NAV = [
   { to: '/webhooks',     icon: Webhook,         label: 'Webhooks' },
   { to: '/admin-override', icon: ShieldOff,     label: 'Soporte cliente' },
   { to: '/settings',     icon: Settings,        label: 'Settings' },
-  { to: '/core-modules', icon: Boxes,           label: 'Módulos core', disabled: true, phase: 'Fase G' },
   { to: '/audit',        icon: History,         label: 'Audit' },
 ];
 
