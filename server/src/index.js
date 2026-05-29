@@ -76,6 +76,7 @@ app.use('/api/v1/auth', require('./routes/auth'));
 app.use('/api/v1/dashboard', require('./routes/dashboard'));
 app.use('/api/v1/modules', require('./routes/modules'));
 app.use('/api/v1/customers', require('./routes/customers'));
+app.use('/api/v1/external', require('./routes/external-modules')); // N°80 item A · vertical → módulos del customer
 app.use('/api/v1/licenses', require('./routes/licenses'));
 app.use('/api/v1/webhooks-inbox', require('./routes/webhooks-inbox'));
 app.use('/api/v1/audit-log', require('./routes/audit'));
